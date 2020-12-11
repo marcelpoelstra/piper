@@ -1,0 +1,73 @@
+version: "3"
+services:
+  rabbit:
+    build: piper-rabbitmq
+    ports:
+      - 15672:15672
+      - 5672:5672
+    networks:
+      - backend
+
+  postgres:
+    build: postgres
+    environment:
+      POSTGRES_DB: piper
+      POSTGRES_USER: piper
+      POSTGRES_PASSWORD: piper
+    ports:
+      - 5432:5432
+    networks:
+      - backend
+
+  coordinator:
+    build: piper-docker
+    depends_on:
+      - rabbit
+      - postgres
+    environment:
+      - JAVA_TOOL_OPTIONS=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005 -Dfile.encoding=UTF-8 -Dfile.io.encoding=UTF-8 -DjavaEncoding=UTF-8
+      - SPRING_PROFILES_ACTIVE=default
+      - MANAGEMENT_ENDPOINT_HEALTH_SHOWDETAILS=always
+      - MANAGEMENT_HEALTH_RABBIT_ENABLED=true
+      - MANAGEMENT_HEALTH_DB_ENABLED=true
+      - SPRING_DATASOURCE_INITIALIZATIONMODE=always
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/piper
+      - SPRING_JACKSON_SERIALIZATION_INDENTOUTPUT=true
+      - PIPER_COORDINATOR_ENABLED=true
+      - PIPER_PIPELINEREPOSITORY_GIT_ENABLED=true
+      - PIPER_PIPELINEREPOSITORY_GIT_URL=https://github.com/kibi/piper-pipelines.git
+      - PIPER_PIPELINEREPOSITORY_GIT_SEARCHPATHS=demo/,video/
+      - PIPER_MESSAGEBROKER_PROVIDER=amqp
+      - SPRING_RABBITMQ_HOST=rabbit
+    ports:
+      - 8080:8080
+      - 5005:5005
+    networks:
+      - backend
+
+  worker:
+    build: piper-docker
+    depends_on:
+      - rabbit
+    environment:
+      - JAVA_TOOL_OPTIONS=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005 -Dfile.encoding=UTF-8 -Dfile.io.encoding=UTF-8 -DjavaEncoding=UTF-8
+      - SPRING_PROFILES_ACTIVE=default
+      - MANAGEMENT_ENDPOINT_HEALTH_SHOWDETAILS=always
+      - MANAGEMENT_HEALTH_RABBIT_ENABLED=false
+      - MANAGEMENT_HEALTH_DB_ENABLED=false
+      - SPRING_JACKSON_SERIALIZATION_INDENTOUTPUT=true
+      - PIPER_WORKER_ENABLED=true
+      - PIPER_WORKER_SUBSCRIPTIONS_TASKS=1
+      - PIPER_MESSAGEBROKER_PROVIDER=amqp
+      - SPRING_RABBITMQ_HOST=rabbit
+    volumes:
+      - c:\temp\video:/videos
+    ports:
+      - 8181:8080
+      - 5006:5005
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge
